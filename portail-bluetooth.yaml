@@ -1,0 +1,202 @@
+blueprint:
+  name: Ouverture automatique portail via Bluetooth voiture
+  description: |
+    Ouvre automatiquement un portail ou une porte de garage quand un appareil 
+    se connecte au Bluetooth d'une voiture ET que cet appareil est physiquement 
+    dans la zone définie (généralement la maison).
+    
+    ✅ Vérifie que l'appareil qui se connecte est bien dans la bonne zone
+    ✅ Empêche l'ouverture si quelqu'un se connecte ailleurs
+    ✅ Parfait pour automatiser l'arrivée sans intervention manuelle
+    
+  domain: automation
+  source_url: https://github.com/votre-repo/blueprints/portail-bluetooth.yaml
+  
+  input:
+    bluetooth_sensor:
+      name: Capteur de connexion Bluetooth
+      description: |
+        Capteur qui détecte les connexions Bluetooth de l'appareil.
+        Format: sensor.xxx_bluetooth_connection
+        
+        Pour activer ce capteur:
+        1. App Home Assistant Companion > Paramètres
+        2. Gérer les capteurs
+        3. Activer "Bluetooth Connection"
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+          
+    device_tracker:
+      name: Traceur de l'appareil (même appareil)
+      description: |
+        Device tracker correspondant AU MÊME appareil que le capteur Bluetooth.
+        
+        ⚠️ IMPORTANT: Ce doit être le même appareil !
+        Exemple: si bluetooth_sensor = sensor.sm_a525f_bluetooth_connection
+        alors device_tracker = device_tracker.sm_a525f
+      selector:
+        entity:
+          filter:
+            - domain: device_tracker
+          
+    bluetooth_mac_addresses:
+      name: Adresses MAC Bluetooth de la voiture
+      description: |
+        Liste des adresses MAC Bluetooth de votre voiture.
+        Format: ["AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66"]
+        
+        🔍 Comment trouver ces adresses:
+        1. Connectez votre téléphone au Bluetooth de la voiture
+        2. Home Assistant > Outils développeur > États
+        3. Cherchez sensor.xxx_bluetooth_connection
+        4. Regardez l'attribut "connected_paired_devices"
+        5. Copiez les adresses exactement comme affichées
+        
+        💡 Astuce: Vous pouvez mettre plusieurs adresses si votre 
+        voiture a plusieurs interfaces Bluetooth (radio, téléphone, etc.)
+      default: []
+      selector:
+        object:
+          
+    target_zone:
+      name: Zone de déclenchement
+      description: |
+        Zone dans laquelle l'appareil DOIT se trouver pour déclencher l'ouverture.
+        
+        Généralement: zone.home (Maison)
+        Mais peut être: zone.travail, zone.lycee, etc.
+      default: zone.home
+      selector:
+        entity:
+          filter:
+            - domain: zone
+          
+    cover_entity:
+      name: Portail ou porte de garage à ouvrir
+      description: |
+        Entité du portail, porte de garage ou barrière à ouvrir.
+      selector:
+        entity:
+          filter:
+            - domain: cover
+          
+    additional_conditions:
+      name: Conditions supplémentaires (optionnel)
+      description: |
+        Conditions YAML supplémentaires à vérifier avant l'ouverture.
+        
+        Exemples:
+        - Horaires: condition time après 07:00, avant 22:00
+        - Jours: condition weekday lun-ven seulement
+        - État alarme: vérifier que l'alarme n'est pas armée
+        
+        Laisser vide si non nécessaire.
+      default: []
+      selector:
+        object:
+          
+    send_notification:
+      name: Envoyer une notification
+      description: Activer les notifications lors de l'ouverture
+      default: true
+      selector:
+        boolean:
+          
+    notification_service:
+      name: Service de notification (si activé)
+      description: |
+        Service de notification mobile ou autre.
+        Format: notify.mobile_app_xxx
+        
+        Laisser vide pour notification persistante uniquement.
+      default: ""
+      selector:
+        text:
+          
+    notification_title:
+      name: Titre de la notification
+      description: Titre du message de notification
+      default: "🚗 Portail"
+      selector:
+        text:
+          
+    notification_message:
+      name: Message de notification
+      description: |
+        Message de la notification.
+        
+        Variables disponibles:
+        - {{ trigger.to_state.attributes.friendly_name }} = Nom de l'appareil
+        - {{ now().strftime('%H:%M') }} = Heure actuelle
+      default: "Ouverture automatique - Connexion Bluetooth détectée"
+      selector:
+        text:
+          multiline: true
+
+mode: single
+max_exceeded: silent
+
+variables:
+  bluetooth_addresses: !input bluetooth_mac_addresses
+  send_notif: !input send_notification
+  notif_service: !input notification_service
+  notif_title: !input notification_title
+  notif_message: !input notification_message
+
+trigger:
+  - platform: state
+    entity_id: !input bluetooth_sensor
+    attribute: connected_paired_devices
+    to: "{{ bluetooth_addresses }}"
+
+condition:
+  # Condition 1: Le portail doit être fermé
+  - condition: state
+    entity_id: !input cover_entity
+    state: closed
+    
+  # Condition 2: L'appareil qui se connecte DOIT être dans la zone définie
+  - condition: zone
+    entity_id: !input device_tracker
+    zone: !input target_zone
+    
+  # Condition 3: Le nombre de connexions Bluetooth a augmenté (= connexion, pas déconnexion)
+  - condition: template
+    value_template: "{{ trigger.to_state.state|int > trigger.from_state.state|int }}"
+    
+  # Condition 4: Conditions supplémentaires (si définies)
+  - condition: and
+    conditions: !input additional_conditions
+
+action:
+  # Action 1: Ouvrir le portail/garage
+  - service: cover.open_cover
+    target:
+      entity_id: !input cover_entity
+    data: {}
+      
+  # Action 2: Envoyer les notifications (si activées)
+  - choose:
+      # Si notifications activées ET service défini
+      - conditions:
+          - condition: template
+            value_template: "{{ send_notif and notif_service != '' }}"
+        sequence:
+          - service: "{{ notif_service }}"
+            data:
+              title: "{{ notif_title }}"
+              message: "{{ notif_message }}"
+              
+      # Si notifications activées mais pas de service = notification persistante seulement
+      - conditions:
+          - condition: template
+            value_template: "{{ send_notif }}"
+        sequence:
+          - service: persistent_notification.create
+            data:
+              title: "{{ notif_title }}"
+              message: "{{ notif_message }} ({{ now().strftime('%H:%M:%S') }})"
+              notification_id: "bluetooth_gate_{{ now().timestamp() | int }}"
+    default: []
