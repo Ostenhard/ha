@@ -108,10 +108,6 @@ condition:
   # Condition 3: Le nombre de connexions Bluetooth a augmenté (= connexion, pas déconnexion)
   - condition: template
     value_template: "{{ trigger.to_state.state|int > trigger.from_state.state|int }}"
-    
-  # Condition 4: Conditions supplémentaires (si définies)
-  - condition: and
-    conditions: !input additional_conditions
 
 action:
   # Action 1: Ouvrir le portail/garage
