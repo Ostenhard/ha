@@ -82,68 +82,11 @@ blueprint:
           filter:
             - domain: cover
           
-    additional_conditions:
-      name: Conditions supplémentaires (optionnel)
-      description: |
-        Conditions YAML supplémentaires à vérifier avant l'ouverture.
-        
-        Exemples:
-        - Horaires: condition time après 07:00, avant 22:00
-        - Jours: condition weekday lun-ven seulement
-        - État alarme: vérifier que l'alarme n'est pas armée
-        
-        Laisser vide si non nécessaire.
-      default: []
-      selector:
-        object:
-          
-    send_notification:
-      name: Envoyer une notification
-      description: Activer les notifications lors de l'ouverture
-      default: true
-      selector:
-        boolean:
-          
-    notification_service:
-      name: Service de notification (si activé)
-      description: |
-        Service de notification mobile ou autre.
-        Format: notify.mobile_app_xxx
-        
-        Laisser vide pour notification persistante uniquement.
-      default: ""
-      selector:
-        text:
-          
-    notification_title:
-      name: Titre de la notification
-      description: Titre du message de notification
-      default: "🚗 Portail"
-      selector:
-        text:
-          
-    notification_message:
-      name: Message de notification
-      description: |
-        Message de la notification.
-        
-        Variables disponibles:
-        - {{ trigger.to_state.attributes.friendly_name }} = Nom de l'appareil
-        - {{ now().strftime('%H:%M') }} = Heure actuelle
-      default: "Ouverture automatique - Connexion Bluetooth détectée"
-      selector:
-        text:
-          multiline: true
-
 mode: single
 max_exceeded: silent
 
 variables:
   bluetooth_addresses: !input bluetooth_mac_addresses
-  send_notif: !input send_notification
-  notif_service: !input notification_service
-  notif_title: !input notification_title
-  notif_message: !input notification_message
 
 trigger:
   - platform: state
@@ -176,27 +119,3 @@ action:
     target:
       entity_id: !input cover_entity
     data: {}
-      
-  # Action 2: Envoyer les notifications (si activées)
-  - choose:
-      # Si notifications activées ET service défini
-      - conditions:
-          - condition: template
-            value_template: "{{ send_notif and notif_service != '' }}"
-        sequence:
-          - service: "{{ notif_service }}"
-            data:
-              title: "{{ notif_title }}"
-              message: "{{ notif_message }}"
-              
-      # Si notifications activées mais pas de service = notification persistante seulement
-      - conditions:
-          - condition: template
-            value_template: "{{ send_notif }}"
-        sequence:
-          - service: persistent_notification.create
-            data:
-              title: "{{ notif_title }}"
-              message: "{{ notif_message }} ({{ now().strftime('%H:%M:%S') }})"
-              notification_id: "bluetooth_gate_{{ now().timestamp() | int }}"
-    default: []
