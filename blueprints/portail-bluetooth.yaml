@@ -10,7 +10,7 @@ blueprint:
     ✅ Parfait pour automatiser l'arrivée sans intervention manuelle
     
   domain: automation
-  source_url: https://github.com/votre-repo/blueprints/portail-bluetooth.yaml
+  source_url: https://github.com/Ostenhard/ha/blob/main/blueprints/portail-bluetooth.yaml
   
   input:
     bluetooth_sensor:
@@ -92,7 +92,7 @@ trigger:
   - platform: state
     entity_id: !input bluetooth_sensor
     attribute: connected_paired_devices
-    to: "{{ bluetooth_addresses }}"
+
 
 condition:
   # Condition 1: Le portail doit être fermé
@@ -107,10 +107,18 @@ condition:
     
   # Condition 3: Le nombre de connexions Bluetooth a augmenté (= connexion, pas déconnexion)
   - condition: template
-    value_template: "{{ trigger.to_state.state|int > trigger.from_state.state|int }}"
+    value_template: >
+      {% set raw_values = trigger.to_state.attributes.connected_paired_devices %} 
+
+      {# 2. Extraire uniquement les adresses MAC de chaque élément #}
+      {# Le regex cherche 17 caractères composés de chiffres, lettres A-F et deux-points #}
+      
+      {% set connectes = raw_values | map('regex_findall', '([0-9A-F:]{17})', ignorecase=True) | map('first') | list %}
+                    
+      {# 3. Comparer les deux listes propres #}
+      {{ connectes | intersect(bluetooth_addresses) | count > 0 }}
 
 action:
-  # Action 1: Ouvrir le portail/garage
   - service: cover.open_cover
     target:
       entity_id: !input cover_entity
