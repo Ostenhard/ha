@@ -89,14 +89,11 @@ variables:
   bluetooth_addresses: !input bluetooth_mac_addresses
 
 trigger:
-  - platform: state
-    entity_id: !input bluetooth_sensor
-
-condition:
-  - condition: numeric_state
+  - platform: numeric_state
     entity_id: !input bluetooth_sensor
     above: 0
 
+condition:
   # Condition 1: Le portail doit être fermé
   - condition: state
     entity_id: !input cover_entity
