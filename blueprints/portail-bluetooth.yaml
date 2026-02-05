@@ -91,10 +91,12 @@ variables:
 trigger:
   - platform: state
     entity_id: !input bluetooth_sensor
-    attribute: connected_paired_devices
-
 
 condition:
+  - condition: numeric_state
+    entity_id: !input bluetooth_sensor
+    above: 0
+
   # Condition 1: Le portail doit être fermé
   - condition: state
     entity_id: !input cover_entity
