@@ -107,15 +107,21 @@ condition:
   # Condition 3: Le nombre de connexions Bluetooth a augmenté (= connexion, pas déconnexion)
   - condition: template
     value_template: >
-      {% set raw_values = trigger.to_state.attributes.connected_paired_devices %} 
-
-      {# 2. Extraire uniquement les adresses MAC de chaque élément #}
-      {# Le regex cherche 17 caractères composés de chiffres, lettres A-F et deux-points #}
+      {% set raw_values = trigger.to_state.attributes.connected_paired_devices %}
       
-      {% set connectes = raw_values | map('regex_findall', '([0-9A-F:]{17})', ignorecase=True) | map('first') | list %}
-                    
-      {# 3. Comparer les deux listes propres #}
-      {{ connectes | intersect(bluetooth_addresses) | count > 0 }}
+      {# Vérifier que raw_values existe et n'est pas None #}
+      {% if raw_values is not none and raw_values | length > 0 %}
+        {# Extraire uniquement les adresses MAC de chaque élément #}
+        {# Le regex cherche 17 caractères composés de chiffres, lettres A-F et deux-points #}
+        
+        {% set connectes = raw_values | map('regex_findall', '([0-9A-F:]{17})', ignorecase=True) | map('first') | list %}
+                      
+        {# Comparer les deux listes propres #}
+        {{ connectes | intersect(bluetooth_addresses) | count > 0 }}
+      {% else %}
+        {# Si pas de données, la condition échoue #}
+        false
+      {% endif %}
 
 action:
   - service: cover.open_cover
